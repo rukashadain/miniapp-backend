@@ -1,3 +1,7 @@
+const mongoose = require("mongoose");
+console.log("✅ Mongoose version:", mongoose.version);
+
+
 // ===== IMPORTS =====
 const express = require("express");
 const bodyParser = require("body-parser");
