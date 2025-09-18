@@ -4,6 +4,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors"); // Added for REST endpoints
 const http = require("http");
 const { Server } = require("socket.io");
+const mongoose = require("mongoose");
 
 // ===== APP SETUP =====
 const app = express();
@@ -23,9 +24,17 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(cors()); // enable CORS for REST routes
 
-// ===== DATA STORAGE =====
-let users = [];       // stores user profiles
-let messages = [];    // stores chat messages
+// ===== DATABASE CONNECTION =====
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log("✅ MongoDB connected"))
+.catch(err => console.error("❌ MongoDB connection error:", err));
+
+// ===== DATA STORAGE (temporary in-memory) =====
+let users = [];       // will move to MongoDB later
+let messages = [];    // will move to MongoDB later
 
 // ===== ROUTES =====
 
