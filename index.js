@@ -1,7 +1,7 @@
 // ===== IMPORTS =====
 const express = require("express");
 const bodyParser = require("body-parser");
-const cors = require("cors"); // Added for REST endpoints
+const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
@@ -22,66 +22,92 @@ const io = new Server(server, {
 const PORT = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
-app.use(cors()); // enable CORS for REST routes
+app.use(cors());
 
 // ===== DATABASE CONNECTION =====
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true
 })
 .then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB connection error:", err));
+.catch(err => {
+  console.error("❌ MongoDB connection error:", err.message);
+  process.exit(1); // stop server if DB connection fails
+});
 
-// ===== DATA STORAGE (temporary in-memory) =====
-let users = [];       // will move to MongoDB later
-let messages = [];    // will move to MongoDB later
+// ===== USER MODEL =====
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  displayName: { type: String, default: "" },
+  bio: { type: String, default: "" },
+  gender: { type: String, default: "" },
+  canPlayRecorded: { type: Boolean, default: false }
+}, { timestamps: true });
+
+const User = mongoose.model("User", userSchema);
+
+// ===== MESSAGE MODEL =====
+const messageSchema = new mongoose.Schema({
+  sender: { type: String, required: true },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const Message = mongoose.model("Message", messageSchema);
 
 // ===== ROUTES =====
-
-// Test endpoint
 app.get("/", (req, res) => {
   res.send("Backend is working ✅");
 });
 
-// Signup route
-app.post("/signup", (req, res) => {
-  const { username, displayName, bio, gender } = req.body;
+// Signup route (now stores in MongoDB)
+app.post("/signup", async (req, res) => {
+  try {
+    const { username, displayName, bio, gender } = req.body;
 
-  if (!username) return res.status(400).json({ error: "Username required" });
+    if (!username) return res.status(400).json({ error: "Username required" });
 
-  if (users.find(u => u.username === username)) {
-    return res.status(400).json({ error: "Username already taken" });
+    const existingUser = await User.findOne({ username });
+    if (existingUser) return res.status(400).json({ error: "Username already taken" });
+
+    const user = new User({ username, displayName, bio, gender });
+    await user.save();
+
+    res.json({ message: "Signup successful", user });
+  } catch (err) {
+    console.error("❌ Error in signup:", err.message);
+    res.status(500).json({ error: "Server error" });
   }
-
-  const user = {
-    id: users.length + 1,
-    username,
-    displayName: displayName || "",
-    bio: bio || "",
-    gender: gender || "",
-    canPlayRecorded: false // default permission for recorded audio/video
-  };
-
-  users.push(user);
-  res.json({ message: "Signup successful", user });
 });
 
 // Get all users
-app.get("/users", (req, res) => {
-  res.json(users);
+app.get("/users", async (req, res) => {
+  try {
+    const users = await User.find();
+    res.json(users);
+  } catch (err) {
+    console.error("❌ Error fetching users:", err.message);
+    res.status(500).json({ error: "Server error" });
+  }
 });
 
 // ===== SOCKET.IO CHAT =====
 io.on("connection", (socket) => {
   console.log("User connected: " + socket.id);
 
-  // Send all previous messages to newly connected user
-  messages.forEach(msg => socket.emit("receive_message", msg));
+  // Send all previous messages from MongoDB
+  Message.find().then(msgs => {
+    msgs.forEach(msg => socket.emit("receive_message", msg));
+  });
 
-  // Listen for new messages
-  socket.on("send_message", (data) => {
-    messages.push(data);
-    io.emit("receive_message", data); // broadcast to all connected clients
+  socket.on("send_message", async (data) => {
+    try {
+      const msg = new Message(data);
+      await msg.save();
+      io.emit("receive_message", msg);
+    } catch (err) {
+      console.error("❌ Error saving message:", err.message);
+    }
   });
 
   socket.on("disconnect", () => {
