@@ -1,65 +1,35 @@
-// ===== IMPORTS =====
-const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
-const http = require("http");
-const { Server } = require("socket.io");
-const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const User = require("./models/User"); // make sure username is removed from schema
-
-// ===== APP SETUP =====
-const app = express();
-const server = http.createServer(app);
-
-// ===== MIDDLEWARE =====
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
-app.use(bodyParser.json());
-
-// ===== SOCKET.IO =====
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"], allowedHeaders: ["Content-Type"] },
-  transports: ["websocket", "polling"]
-});
-
-// ===== DATABASE CONNECTION =====
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB connection error:", err));
-
-// ===== SOCKET.IO CHAT =====
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-  socket.on("disconnect", () => console.log("User disconnected:", socket.id));
-});
-
-// ===== ROUTES =====
-app.get("/", (req, res) => res.send("Backend is running ✅"));
-
 // ===== SIGNUP API =====
 app.post("/api/signup", async (req, res) => {
   try {
-    const { email, password, displayName } = req.body;
+    let { email, password, displayName } = req.body;
 
-    if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    }
 
+    // Normalize email
+    email = email.trim().toLowerCase();
+
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ success: false, message: "Email already registered" });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: "Email already registered" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ email, password: hashedPassword, displayName });
+    const user = new User({ email, password: hashedPassword, displayName: displayName || "" });
 
     await user.save();
     res.json({ success: true, message: "Signup successful, please verify your email", userId: user._id });
+
   } catch (err) {
-    console.error(err);
+    console.error("Signup error:", err);
+
+    // Catch duplicate key error safely
+    if (err.code === 11000 && err.keyPattern.email) {
+      return res.status(400).json({ success: false, message: "Email already registered" });
+    }
+
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -67,7 +37,14 @@ app.post("/api/signup", async (req, res) => {
 // ===== LOGIN API =====
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    }
+
+    // Normalize email
+    email = email.trim().toLowerCase();
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ success: false, message: "User not found" });
@@ -76,17 +53,9 @@ app.post("/api/login", async (req, res) => {
     if (!isMatch) return res.status(400).json({ success: false, message: "Incorrect password" });
 
     res.json({ success: true, message: "Login successful", userId: user._id });
+
   } catch (err) {
-    console.error(err);
+    console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
-
-// ===== EMAIL VERIFICATION PLACEHOLDER =====
-app.post("/api/verify-email", async (req, res) => {
-  res.json({ success: true, message: "Email verified (placeholder)" });
-});
-
-// ===== START SERVER =====
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
