@@ -6,19 +6,25 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt"); // for password hashing
-const User = require("./models/User"); // make sure you create this file
+const User = require("./models/User"); // make sure you have this
 
 // ===== APP SETUP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== MIDDLEWARE =====
+// Explicit CORS setup for mobile browsers
+app.use(cors({
+  origin: "*", // allow all origins
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
 app.use(bodyParser.json());
-app.use(cors());
 
 // ===== SOCKET.IO =====
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: { origin: "*", methods: ["GET", "POST"], allowedHeaders: ["Content-Type"] },
   transports: ["websocket", "polling"]
 });
 
@@ -30,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("✅ MongoDB connected"))
 .catch(err => console.error("❌ MongoDB connection error:", err));
 
-// ===== SOCKET.IO CHAT (placeholder for future messages) =====
+// ===== SOCKET.IO CHAT =====
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
@@ -53,11 +59,10 @@ app.get("/api/test-bcrypt", async (req, res) => {
     const hashed = await bcrypt.hash(testPassword, 10);
     const match = await bcrypt.compare(testPassword, hashed);
 
-    if (match) {
-      res.json({ success: true, message: "Bcrypt is working ✅" });
-    } else {
-      res.json({ success: false, message: "Bcrypt failed ❌" });
-    }
+    res.json({
+      success: match,
+      message: match ? "Bcrypt is working ✅" : "Bcrypt failed ❌"
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Error testing bcrypt" });
@@ -80,12 +85,7 @@ app.post("/api/signup", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = new User({
-      email,
-      password: hashedPassword,
-      displayName
-    });
-
+    const user = new User({ email, password: hashedPassword, displayName });
     await user.save();
 
     res.json({ success: true, message: "Signup successful, please verify your email", userId: user._id });
@@ -113,7 +113,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Placeholder for email verification API
+// Email verification placeholder
 app.post("/api/verify-email", async (req, res) => {
   const { userId, code } = req.body;
   res.json({ success: true, message: "Email verified (placeholder)" });
