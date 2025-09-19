@@ -5,17 +5,16 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
-const bcrypt = require("bcrypt"); // for password hashing
-const User = require("./models/User"); // make sure you have this
+const bcrypt = require("bcrypt");
+const User = require("./models/User"); // Make sure this exists
 
 // ===== APP SETUP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== MIDDLEWARE =====
-// Explicit CORS setup for mobile browsers
 app.use(cors({
-  origin: "*", // allow all origins
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
@@ -39,18 +38,11 @@ mongoose.connect(process.env.MONGO_URI, {
 // ===== SOCKET.IO CHAT =====
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
+  socket.on("disconnect", () => console.log("User disconnected:", socket.id));
 });
 
-// ===== ROUTES =====
-
-// Test endpoint
-app.get("/", (req, res) => {
-  res.send("Backend is running ✅");
-});
+// ===== TEST ENDPOINT =====
+app.get("/", (req, res) => res.send("Backend is running ✅"));
 
 // ===== BCRYPT TEST =====
 app.get("/api/test-bcrypt", async (req, res) => {
@@ -58,11 +50,7 @@ app.get("/api/test-bcrypt", async (req, res) => {
     const testPassword = "123456";
     const hashed = await bcrypt.hash(testPassword, 10);
     const match = await bcrypt.compare(testPassword, hashed);
-
-    res.json({
-      success: match,
-      message: match ? "Bcrypt is working ✅" : "Bcrypt failed ❌"
-    });
+    res.json({ success: match, message: match ? "Bcrypt is working ✅" : "Bcrypt failed ❌" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Error testing bcrypt" });
@@ -85,12 +73,13 @@ app.post("/api/signup", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Make sure username is not included to avoid duplicate key error
     const user = new User({ email, password: hashedPassword, displayName });
     await user.save();
 
-    res.json({ success: true, message: "Signup successful, please verify your email", userId: user._id });
+    res.json({ success: true, message: "Signup successful! You can now login.", userId: user._id });
   } catch (err) {
-    console.error(err);
+    console.error("Signup error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -99,6 +88,9 @@ app.post("/api/signup", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    }
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ success: false, message: "User not found" });
@@ -108,7 +100,7 @@ app.post("/api/login", async (req, res) => {
 
     res.json({ success: true, message: "Login successful", userId: user._id });
   } catch (err) {
-    console.error(err);
+    console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -121,6 +113,4 @@ app.post("/api/verify-email", async (req, res) => {
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
