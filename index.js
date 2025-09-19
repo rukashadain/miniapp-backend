@@ -6,7 +6,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const User = require("./models/User"); // Make sure this exists
+const User = require("./models/User"); // make sure username is removed from schema
 
 // ===== APP SETUP =====
 const app = express();
@@ -18,7 +18,6 @@ app.use(cors({
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-
 app.use(bodyParser.json());
 
 // ===== SOCKET.IO =====
@@ -41,45 +40,26 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("User disconnected:", socket.id));
 });
 
-// ===== TEST ENDPOINT =====
+// ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend is running ✅"));
-
-// ===== BCRYPT TEST =====
-app.get("/api/test-bcrypt", async (req, res) => {
-  try {
-    const testPassword = "123456";
-    const hashed = await bcrypt.hash(testPassword, 10);
-    const match = await bcrypt.compare(testPassword, hashed);
-    res.json({ success: match, message: match ? "Bcrypt is working ✅" : "Bcrypt failed ❌" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Error testing bcrypt" });
-  }
-});
 
 // ===== SIGNUP API =====
 app.post("/api/signup", async (req, res) => {
   try {
     const { email, password, displayName } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Email and password required" });
-    }
+    if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
     const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ success: false, message: "Email already registered" });
-    }
+    if (existingUser) return res.status(400).json({ success: false, message: "Email already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Make sure username is not included to avoid duplicate key error
     const user = new User({ email, password: hashedPassword, displayName });
-    await user.save();
 
-    res.json({ success: true, message: "Signup successful! You can now login.", userId: user._id });
+    await user.save();
+    res.json({ success: true, message: "Signup successful, please verify your email", userId: user._id });
   } catch (err) {
-    console.error("Signup error:", err);
+    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -88,9 +68,6 @@ app.post("/api/signup", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Email and password required" });
-    }
 
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ success: false, message: "User not found" });
@@ -100,14 +77,13 @@ app.post("/api/login", async (req, res) => {
 
     res.json({ success: true, message: "Login successful", userId: user._id });
   } catch (err) {
-    console.error("Login error:", err);
+    console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 // ===== EMAIL VERIFICATION PLACEHOLDER =====
 app.post("/api/verify-email", async (req, res) => {
-  const { userId, code } = req.body;
   res.json({ success: true, message: "Email verified (placeholder)" });
 });
 
