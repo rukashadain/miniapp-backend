@@ -69,7 +69,7 @@ app.get("/api/test-bcrypt", async (req, res) => {
   }
 });
 
-// Signup API
+// ===== SIGNUP API =====
 app.post("/api/signup", async (req, res) => {
   try {
     const { email, password, displayName } = req.body;
@@ -95,7 +95,7 @@ app.post("/api/signup", async (req, res) => {
   }
 });
 
-// Login API
+// ===== LOGIN API =====
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -113,7 +113,7 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Email verification placeholder
+// ===== EMAIL VERIFICATION PLACEHOLDER =====
 app.post("/api/verify-email", async (req, res) => {
   const { userId, code } = req.body;
   res.json({ success: true, message: "Email verified (placeholder)" });
