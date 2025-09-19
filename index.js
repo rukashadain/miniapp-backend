@@ -46,6 +46,24 @@ app.get("/", (req, res) => {
   res.send("Backend is running ✅");
 });
 
+// ===== BCRYPT TEST =====
+app.get("/api/test-bcrypt", async (req, res) => {
+  try {
+    const testPassword = "123456";
+    const hashed = await bcrypt.hash(testPassword, 10);
+    const match = await bcrypt.compare(testPassword, hashed);
+
+    if (match) {
+      res.json({ success: true, message: "Bcrypt is working ✅" });
+    } else {
+      res.json({ success: false, message: "Bcrypt failed ❌" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Error testing bcrypt" });
+  }
+});
+
 // Signup API
 app.post("/api/signup", async (req, res) => {
   try {
@@ -70,7 +88,6 @@ app.post("/api/signup", async (req, res) => {
 
     await user.save();
 
-    // Here you can send verification email later
     res.json({ success: true, message: "Signup successful, please verify your email", userId: user._id });
   } catch (err) {
     console.error(err);
@@ -99,7 +116,6 @@ app.post("/api/login", async (req, res) => {
 // Placeholder for email verification API
 app.post("/api/verify-email", async (req, res) => {
   const { userId, code } = req.body;
-  // Implement verification logic here
   res.json({ success: true, message: "Email verified (placeholder)" });
 });
 
