@@ -4,20 +4,15 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
-const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
-const User = require("./models/User"); // ensure schema has no username field
+const admin = require("firebase-admin");
 
 // ===== APP SETUP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== MIDDLEWARE =====
-app.use(cors({
-  origin: "*", // allow all origins
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
+app.use(cors());
 app.use(bodyParser.json());
 
 // ===== SOCKET.IO SETUP =====
@@ -31,13 +26,14 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("User disconnected:", socket.id));
 });
 
-// ===== DATABASE CONNECTION =====
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("❌ MongoDB connection error:", err));
+// ===== FIREBASE INIT =====
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
 
 // ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend is running ✅"));
@@ -48,14 +44,14 @@ app.post("/api/signup", async (req, res) => {
     const { email, password, displayName } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(400).json({ success: false, message: "Email already registered" });
+    const userRef = db.collection("users").doc(email);
+    const doc = await userRef.get();
+    if (doc.exists) return res.status(400).json({ success: false, message: "Email already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ email, password: hashedPassword, displayName });
-    await user.save();
+    await userRef.set({ email, password: hashedPassword, displayName });
 
-    res.json({ success: true, message: "Signup successful! Proceed to verify your email.", userId: user._id });
+    res.json({ success: true, message: "Signup successful!", userId: email });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -68,27 +64,23 @@ app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ success: false, message: "User not found" });
+    const userRef = db.collection("users").doc(email);
+    const doc = await userRef.get();
+    if (!doc.exists) return res.status(400).json({ success: false, message: "User not found" });
 
+    const user = doc.data();
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ success: false, message: "Incorrect password" });
 
-    res.json({ success: true, message: "Login successful", userId: user._id });
+    res.json({ success: true, message: "Login successful", userId: email });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-// ===== EMAIL VERIFICATION PLACEHOLDER =====
-app.post("/api/verify-email", async (req, res) => {
-  res.json({ success: true, message: "Email verified (placeholder)" });
-});
-
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// ===== EXPORT APP FOR RENDER =====
 module.exports = app;
