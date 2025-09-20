@@ -8,16 +8,19 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-// Use the service account key from Render environment variable
-// In Render: set FBASE_KEY to the full JSON string of your service account
-const serviceAccount = JSON.parse(process.env.FBASE_KEY);
+try {
+  const serviceAccount = JSON.parse(process.env.FBASE_KEY);
+  // Fix private key newlines (Render escapes them with \\n)
+  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
-// Fix private key newlines (Render escapes them with \\n)
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
+  console.log("✅ Firebase initialized successfully");
+} catch (err) {
+  console.error("❌ Firebase initialization failed:", err);
+}
 
 const db = admin.firestore();
 const usersCollection = db.collection("users"); // Firestore collection
