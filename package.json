@@ -1,24 +1,24 @@
 {
   "name": "luma-backend",
   "version": "1.0.0",
-  "description": "Backend for Telegram-style mini app with Firebase",
+  "description": "Backend for Telegram-style mini app using Firebase",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "engines": {
+    "node": "18.x"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.1.0",
+    "@types/node": "^22.13.11",
     "body-parser": "^2.2.0",
-    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "socket.io": "^4.8.1",
     "bcrypt": "^5.1.0",
     "firebase-admin": "^13.5.0"
-  },
-  "engines": {
-    "node": "18.x"
   }
 }
