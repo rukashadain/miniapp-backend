@@ -21,7 +21,6 @@ admin.initializeApp({
 
 const db = admin.firestore();
 const usersCollection = db.collection("users"); // Firestore collection
-console.log("✅ Firebase initialized successfully");
 
 // ===== APP SETUP =====
 const app = express();
@@ -94,21 +93,25 @@ app.post("/api/verify-email", async (req, res) => {
   res.json({ success: true, message: "Email verified (placeholder)" });
 });
 
-// ===== FIRESTORE TEST API =====
+// ===== FIRESTORE TEST ENDPOINT =====
 app.get("/api/test-firestore", async (req, res) => {
   try {
-    const docRef = usersCollection.doc("testDoc");
-    await docRef.set({ message: "Firestore is connected ✅", timestamp: new Date() });
+    // Write a temporary test document
+    const testDocRef = db.collection("test").doc("ping");
+    await testDocRef.set({ message: "Hello from Render backend", timestamp: Date.now() });
 
-    const docSnap = await docRef.get();
-    if (!docSnap.exists) {
-      return res.status(500).json({ success: false, message: "Failed to read test document" });
-    }
-
-    res.json({ success: true, data: docSnap.data() });
+    // Read it back
+    const docSnap = await testDocRef.get();
+    if (!docSnap.exists) throw new Error("Document not found after write");
+    
+    res.json({
+      success: true,
+      message: "Firestore write/read test successful ✅",
+      data: docSnap.data()
+    });
   } catch (err) {
     console.error("Firestore test error:", err);
-    res.status(500).json({ success: false, message: "Firestore test failed" });
+    res.status(500).json({ success: false, message: "Firestore test failed ❌", error: err.message });
   }
 });
 
