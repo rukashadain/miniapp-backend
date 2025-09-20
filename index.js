@@ -8,22 +8,20 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-try {
-  const serviceAccount = JSON.parse(process.env.FBASE_KEY);
-  // Fix private key newlines (Render escapes them with \\n)
-  serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+// Use the service account key from Render environment variable
+// In Render: set FBASE_KEY to the full JSON string of your service account
+const serviceAccount = JSON.parse(process.env.FBASE_KEY);
 
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
+// Fix private key newlines (Render escapes them with \\n)
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
-  console.log("✅ Firebase initialized successfully");
-} catch (err) {
-  console.error("❌ Firebase initialization failed:", err);
-}
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
 
 const db = admin.firestore();
 const usersCollection = db.collection("users"); // Firestore collection
+console.log("✅ Firebase initialized successfully");
 
 // ===== APP SETUP =====
 const app = express();
@@ -94,6 +92,24 @@ app.post("/api/login", async (req, res) => {
 // ===== EMAIL VERIFICATION PLACEHOLDER =====
 app.post("/api/verify-email", async (req, res) => {
   res.json({ success: true, message: "Email verified (placeholder)" });
+});
+
+// ===== FIRESTORE TEST API =====
+app.get("/api/test-firestore", async (req, res) => {
+  try {
+    const docRef = usersCollection.doc("testDoc");
+    await docRef.set({ message: "Firestore is connected ✅", timestamp: new Date() });
+
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      return res.status(500).json({ success: false, message: "Failed to read test document" });
+    }
+
+    res.json({ success: true, data: docSnap.data() });
+  } catch (err) {
+    console.error("Firestore test error:", err);
+    res.status(500).json({ success: false, message: "Firestore test failed" });
+  }
 });
 
 // ===== START SERVER =====
