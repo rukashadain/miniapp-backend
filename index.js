@@ -8,16 +8,21 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-// Use the service account key from Render environment variable
-// In Render: set FBASE_KEY to the full JSON string of your service account
-const serviceAccount = JSON.parse(process.env.FBASE_KEY);
+// Ensure your Render environment variable FBASE_KEY contains the full JSON string of your service account
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.FBASE_KEY);
+} catch (err) {
+  console.error("❌ Failed to parse FBASE_KEY:", err);
+  process.exit(1);
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
 const db = admin.firestore();
-const usersCollection = db.collection("users"); // Firestore collection
+const usersCollection = db.collection("users");
 
 // ===== APP SETUP =====
 const app = express();
