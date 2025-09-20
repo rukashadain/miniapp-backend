@@ -7,12 +7,28 @@ const { Server } = require("socket.io");
 const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
+// ===== FIREBASE SETUP =====
+// Use the service account key from Render environment variable
+// In Render: set FBASE_KEY to the full JSON string of your service account
+const serviceAccount = JSON.parse(process.env.FBASE_KEY);
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const db = admin.firestore();
+const usersCollection = db.collection("users"); // Firestore collection
+
 // ===== APP SETUP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== MIDDLEWARE =====
-app.use(cors());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
 app.use(bodyParser.json());
 
 // ===== SOCKET.IO SETUP =====
@@ -26,15 +42,6 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("User disconnected:", socket.id));
 });
 
-// ===== FIREBASE INIT =====
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
-const db = admin.firestore();
-
 // ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend is running ✅"));
 
@@ -44,14 +51,13 @@ app.post("/api/signup", async (req, res) => {
     const { email, password, displayName } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
-    const userRef = db.collection("users").doc(email);
-    const doc = await userRef.get();
-    if (doc.exists) return res.status(400).json({ success: false, message: "Email already registered" });
+    const snapshot = await usersCollection.where("email", "==", email).get();
+    if (!snapshot.empty) return res.status(400).json({ success: false, message: "Email already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await userRef.set({ email, password: hashedPassword, displayName });
+    const userRef = await usersCollection.add({ email, password: hashedPassword, displayName });
 
-    res.json({ success: true, message: "Signup successful!", userId: email });
+    res.json({ success: true, message: "Signup successful! Proceed to verify your email.", userId: userRef.id });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -64,19 +70,24 @@ app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
-    const userRef = db.collection("users").doc(email);
-    const doc = await userRef.get();
-    if (!doc.exists) return res.status(400).json({ success: false, message: "User not found" });
+    const snapshot = await usersCollection.where("email", "==", email).get();
+    if (snapshot.empty) return res.status(400).json({ success: false, message: "User not found" });
 
-    const user = doc.data();
-    const isMatch = await bcrypt.compare(password, user.password);
+    const userDoc = snapshot.docs[0];
+    const userData = userDoc.data();
+    const isMatch = await bcrypt.compare(password, userData.password);
     if (!isMatch) return res.status(400).json({ success: false, message: "Incorrect password" });
 
-    res.json({ success: true, message: "Login successful", userId: email });
+    res.json({ success: true, message: "Login successful", userId: userDoc.id });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
+});
+
+// ===== EMAIL VERIFICATION PLACEHOLDER =====
+app.post("/api/verify-email", async (req, res) => {
+  res.json({ success: true, message: "Email verified (placeholder)" });
 });
 
 // ===== START SERVER =====
