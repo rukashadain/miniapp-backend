@@ -9,6 +9,7 @@ const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
 // Use the service account key from Render environment variable
+// In Render: set FIREBASE_SERVICE_ACCOUNT to your one-line JSON
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 // Fix private key newlines (Render escapes them with \\n)
@@ -19,7 +20,7 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
-const usersCollection = db.collection("users");
+const usersCollection = db.collection("users"); // Firestore collection
 
 // ===== APP SETUP =====
 const app = express();
@@ -51,13 +52,26 @@ app.get("/", (req, res) => res.send("Backend is running ✅"));
 app.post("/api/signup", async (req, res) => {
   try {
     const { email, password, displayName } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
 
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    }
+
+    // Check if email already exists
     const snapshot = await usersCollection.where("email", "==", email).get();
-    if (!snapshot.empty) return res.status(400).json({ success: false, message: "Email already registered" });
+    if (!snapshot.empty) {
+      return res.status(400).json({ success: false, message: "Email already registered" });
+    }
 
+    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userRef = await usersCollection.add({ email, password: hashedPassword, displayName });
+
+    // Add user to Firestore (ignore undefined displayName)
+    const userRef = await usersCollection.add({
+      email,
+      password: hashedPassword,
+      ...(displayName ? { displayName } : {})
+    });
 
     res.json({ success: true, message: "Signup successful!", userId: userRef.id });
   } catch (err) {
@@ -70,15 +84,29 @@ app.post("/api/signup", async (req, res) => {
 app.post("/api/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ success: false, message: "Email and password required" });
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    }
 
     const snapshot = await usersCollection.where("email", "==", email).get();
-    if (snapshot.empty) return res.status(400).json({ success: false, message: "User not found" });
+
+    if (snapshot.empty) {
+      return res.status(400).json({ success: false, message: "User not found" });
+    }
 
     const userDoc = snapshot.docs[0];
     const userData = userDoc.data();
+
+    if (!userData.password) {
+      return res.status(500).json({ success: false, message: "User has no password set" });
+    }
+
     const isMatch = await bcrypt.compare(password, userData.password);
-    if (!isMatch) return res.status(400).json({ success: false, message: "Incorrect password" });
+
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Incorrect password" });
+    }
 
     res.json({ success: true, message: "Login successful", userId: userDoc.id });
   } catch (err) {
@@ -87,12 +115,20 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// ===== FIRESTORE TEST API =====
+// ===== EMAIL VERIFICATION PLACEHOLDER =====
+app.post("/api/verify-email", async (req, res) => {
+  res.json({ success: true, message: "Email verified (placeholder)" });
+});
+
+// ===== FIRESTORE TEST ENDPOINT =====
 app.get("/api/test-firestore", async (req, res) => {
   try {
     const testDocRef = db.collection("test").doc("ping");
     await testDocRef.set({ message: "Hello from Render backend", timestamp: Date.now() });
+
     const docSnap = await testDocRef.get();
+    if (!docSnap.exists) throw new Error("Document not found after write");
+
     res.json({
       success: true,
       message: "Firestore write/read test successful ✅",
