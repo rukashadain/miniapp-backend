@@ -8,9 +8,8 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-// Use the service account key from Render environment variable
-// In Render: set FBASE_KEY to the full JSON string of your service account
-const serviceAccount = JSON.parse(process.env.FBASE_KEY);
+// Use your one-line service account from Render environment
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 // Fix private key newlines (Render escapes them with \\n)
 serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
