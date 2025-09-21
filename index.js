@@ -8,7 +8,7 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-// Use your one-line service account from Render environment
+// Use the service account key from Render environment variable
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 // Fix private key newlines (Render escapes them with \\n)
@@ -19,7 +19,7 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
-const usersCollection = db.collection("users"); // Firestore collection
+const usersCollection = db.collection("users");
 
 // ===== APP SETUP =====
 const app = express();
@@ -59,7 +59,7 @@ app.post("/api/signup", async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRef = await usersCollection.add({ email, password: hashedPassword, displayName });
 
-    res.json({ success: true, message: "Signup successful! Proceed to verify your email.", userId: userRef.id });
+    res.json({ success: true, message: "Signup successful!", userId: userRef.id });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -87,22 +87,12 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// ===== EMAIL VERIFICATION PLACEHOLDER =====
-app.post("/api/verify-email", async (req, res) => {
-  res.json({ success: true, message: "Email verified (placeholder)" });
-});
-
-// ===== FIRESTORE TEST ENDPOINT =====
+// ===== FIRESTORE TEST API =====
 app.get("/api/test-firestore", async (req, res) => {
   try {
-    // Write a temporary test document
     const testDocRef = db.collection("test").doc("ping");
     await testDocRef.set({ message: "Hello from Render backend", timestamp: Date.now() });
-
-    // Read it back
     const docSnap = await testDocRef.get();
-    if (!docSnap.exists) throw new Error("Document not found after write");
-    
     res.json({
       success: true,
       message: "Firestore write/read test successful ✅",
