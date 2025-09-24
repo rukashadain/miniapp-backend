@@ -8,19 +8,14 @@ const bcrypt = require("bcrypt");
 const admin = require("firebase-admin");
 
 // ===== FIREBASE SETUP =====
-// Use the service account key from Render environment variable
-// In Render: set FIREBASE_SERVICE_ACCOUNT to your one-line JSON
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-// Fix private key newlines (Render escapes them with \\n)
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
 const db = admin.firestore();
-const usersCollection = db.collection("users"); // Firestore collection
 
 // ===== APP SETUP =====
 const app = express();
@@ -29,7 +24,7 @@ const server = http.createServer(app);
 // ===== MIDDLEWARE =====
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 app.use(bodyParser.json());
@@ -40,37 +35,62 @@ const io = new Server(server, {
   transports: ["websocket","polling"]
 });
 
+// ===== SOCKET.IO CHAT LOGIC =====
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
+
+  // Join a room
+  socket.on("joinRoom", (roomId) => {
+    socket.join(roomId);
+    console.log(`User ${socket.id} joined room ${roomId}`);
+  });
+
+  // Receive chat message
+  socket.on("chatMessage", async ({ roomId, senderId, message }) => {
+    try {
+      const timestamp = Date.now();
+
+      // Store message in Firestore
+      await db.collection("chats").doc(roomId)
+              .collection("messages").add({ senderId, message, timestamp });
+
+      // Broadcast to room
+      io.to(roomId).emit("chatMessage", { senderId, message, timestamp });
+    } catch(err) {
+      console.error("Error saving message:", err);
+    }
+  });
+
   socket.on("disconnect", () => console.log("User disconnected:", socket.id));
 });
+
+// ===== HELPER TO GET USER COLLECTION BASED ON GENDER =====
+const getUserCollection = (gender) => {
+  if (!gender) return db.collection("users");
+  return gender.toLowerCase() === "male" ? db.collection("maleUsers") : db.collection("femaleUsers");
+};
 
 // ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend is running ✅"));
 
-// ===== SIGNUP API =====
+// ===== SIGNUP =====
 app.post("/api/signup", async (req, res) => {
   try {
-    const { email, password, displayName } = req.body;
+    const { email, password, displayName, gender } = req.body;
+    if (!email || !password || !gender)
+      return res.status(400).json({ success: false, message: "Email, password and gender required" });
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Email and password required" });
-    }
-
-    // Check if email already exists
+    const usersCollection = getUserCollection(gender);
     const snapshot = await usersCollection.where("email", "==", email).get();
-    if (!snapshot.empty) {
-      return res.status(400).json({ success: false, message: "Email already registered" });
-    }
+    if (!snapshot.empty) return res.status(400).json({ success: false, message: "Email already registered" });
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Add user to Firestore (ignore undefined displayName)
     const userRef = await usersCollection.add({
       email,
       password: hashedPassword,
-      ...(displayName ? { displayName } : {})
+      displayName: displayName || "",
+      gender
     });
 
     res.json({ success: true, message: "Signup successful!", userId: userRef.id });
@@ -80,68 +100,56 @@ app.post("/api/signup", async (req, res) => {
   }
 });
 
-// ===== LOGIN API =====
+// ===== LOGIN =====
 app.post("/api/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, gender } = req.body;
+    if (!email || !password || !gender)
+      return res.status(400).json({ success: false, message: "Email, password and gender required" });
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: "Email and password required" });
-    }
-
+    const usersCollection = getUserCollection(gender);
     const snapshot = await usersCollection.where("email", "==", email).get();
-
-    if (snapshot.empty) {
-      return res.status(400).json({ success: false, message: "User not found" });
-    }
+    if (snapshot.empty) return res.status(400).json({ success: false, message: "User not found" });
 
     const userDoc = snapshot.docs[0];
     const userData = userDoc.data();
-
-    if (!userData.password) {
-      return res.status(500).json({ success: false, message: "User has no password set" });
-    }
-
-    const isMatch = await bcrypt.compare(password, userData.password);
-
-    if (!isMatch) {
-      return res.status(400).json({ success: false, message: "Incorrect password" });
-    }
+    const isMatch = await bcrypt.compare(password, userData.password || "");
+    if (!isMatch) return res.status(400).json({ success: false, message: "Incorrect password" });
 
     res.json({ success: true, message: "Login successful", userId: userDoc.id });
-  } catch (err) {
+  } catch(err) {
     console.error("Login error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
-// ===== EMAIL VERIFICATION PLACEHOLDER =====
-app.post("/api/verify-email", async (req, res) => {
-  res.json({ success: true, message: "Email verified (placeholder)" });
+// ===== GET USER PROFILE =====
+app.get("/api/user/:gender/:userId", async (req, res) => {
+  try {
+    const { gender, userId } = req.params;
+    const usersCollection = getUserCollection(gender);
+    const userDoc = await usersCollection.doc(userId).get();
+    if (!userDoc.exists) return res.status(404).json({ success: false, message: "User not found" });
+    res.json({ success: true, data: userDoc.data() });
+  } catch(err) {
+    console.error("Fetch user error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 });
 
-// ===== FIRESTORE TEST ENDPOINT =====
+// ===== FIRESTORE TEST =====
 app.get("/api/test-firestore", async (req, res) => {
   try {
-    const testDocRef = db.collection("test").doc("ping");
-    await testDocRef.set({ message: "Hello from Render backend", timestamp: Date.now() });
-
-    const docSnap = await testDocRef.get();
-    if (!docSnap.exists) throw new Error("Document not found after write");
-
-    res.json({
-      success: true,
-      message: "Firestore write/read test successful ✅",
-      data: docSnap.data()
-    });
-  } catch (err) {
-    console.error("Firestore test error:", err);
-    res.status(500).json({ success: false, message: "Firestore test failed ❌", error: err.message });
+    const testDoc = db.collection("test").doc("ping");
+    await testDoc.set({ message: "Hello from Render", timestamp: Date.now() });
+    const snap = await testDoc.get();
+    res.json({ success: true, data: snap.data() });
+  } catch(err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Firestore test failed", error: err.message });
   }
 });
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-module.exports = app;
