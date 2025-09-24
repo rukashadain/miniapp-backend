@@ -15,15 +15,14 @@ admin.initializeApp({
 });
 
 const db = admin.firestore();
-const usersCollection = db.collection("users"); // for user info
-const messagesCollection = db.collection("messages"); // for chat messages
+const chatsCollection = db.collection("chats");
 
 // ===== APP SETUP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== MIDDLEWARE =====
-app.use(cors({ origin: "*", methods: ["GET","POST"], allowedHeaders: ["Content-Type"] }));
+app.use(cors({ origin: "*", methods: ["GET","POST"] }));
 app.use(bodyParser.json());
 
 // ===== SOCKET.IO =====
@@ -35,36 +34,32 @@ const onlineUsers = new Map();
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // Track user when they join
   socket.on("join", ({ userId }) => {
     onlineUsers.set(userId, socket.id);
-    console.log(`User ${userId} connected with socket ${socket.id}`);
+    console.log(`User ${userId} connected`);
   });
 
-  // Receive chat message
-  socket.on("chat-message", async ({ userId, targetUid, message }) => {
+  socket.on("send-message", async ({ senderId, receiverId, message }) => {
     const timestamp = Date.now();
+    const chatId = senderId < receiverId ? `${senderId}_${receiverId}` : `${receiverId}_${senderId}`;
+    const chatRef = chatsCollection.doc(chatId).collection("messages");
 
-    // Save to Firestore
+    // Save message
     try {
-      await messagesCollection.add({ userId, targetUid, message, timestamp });
+      await chatRef.add({ senderId, message, timestamp });
     } catch (err) {
       console.error("Error saving message:", err);
     }
 
-    // Send message to recipient if online
-    const targetSocket = onlineUsers.get(targetUid);
-    if (targetSocket) {
-      io.to(targetSocket).emit("chat-message", { userId, message, timestamp });
-    }
-
-    // Also send to sender
-    socket.emit("chat-message", { userId, message, timestamp });
+    // Emit to sender & receiver
+    const payload = { senderId, message, timestamp };
+    socket.emit("receive-message", payload);
+    const receiverSocket = onlineUsers.get(receiverId);
+    if (receiverSocket) io.to(receiverSocket).emit("receive-message", payload);
   });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-    // Remove disconnected socket from map
     for (let [uid, sId] of onlineUsers) {
       if (sId === socket.id) onlineUsers.delete(uid);
     }
@@ -74,19 +69,13 @@ io.on("connection", (socket) => {
 // ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend running ✅"));
 
-// Fetch chat history between two users
-app.get("/api/messages/:uid1/:uid2", async (req, res) => {
-  const { uid1, uid2 } = req.params;
+// Fetch chat messages
+app.get("/api/chats/:user1/:user2", async (req, res) => {
+  const { user1, user2 } = req.params;
+  const chatId = user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
   try {
-    const snapshot = await messagesCollection
-      .where("userId", "in", [uid1, uid2])
-      .orderBy("timestamp")
-      .get();
-
-    const messages = snapshot.docs
-      .map(doc => doc.data())
-      .filter(m => (m.userId === uid1 && m.targetUid === uid2) || (m.userId === uid2 && m.targetUid === uid1));
-
+    const snapshot = await chatsCollection.doc(chatId).collection("messages").orderBy("timestamp").get();
+    const messages = snapshot.docs.map(doc => doc.data());
     res.json({ success: true, messages });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
