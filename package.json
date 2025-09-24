@@ -1,7 +1,7 @@
 {
   "name": "nodejs-backend",
   "version": "1.0.0",
-  "description": "Backend for Telegram-style app with Firebase",
+  "description": "Backend for Telegram-style app with Firebase and real-time chat",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "body-parser": "^2.2.0",
+    "body-parser": "^1.20.2",
     "socket.io": "^4.8.1",
     "bcrypt": "^5.1.0",
     "firebase-admin": "^12.7.0",
