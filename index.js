@@ -29,39 +29,64 @@ app.use(bodyParser.json());
 // ===== SOCKET.IO =====
 const io = new Server(server, { cors: { origin: "*", methods: ["GET","POST"] } });
 
+// Map userId → socket.id
+const onlineUsers = new Map();
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
-  // Receive chat message
-  socket.on("chat-message", async (data) => {
-    const { userId, message } = data;
+  // Track user when they join
+  socket.on("join", ({ userId }) => {
+    onlineUsers.set(userId, socket.id);
+    console.log(`User ${userId} connected with socket ${socket.id}`);
+  });
 
-    // Broadcast to everyone
-    io.emit("chat-message", { userId, message, timestamp: Date.now() });
+  // Receive chat message
+  socket.on("chat-message", async ({ userId, targetUid, message }) => {
+    const timestamp = Date.now();
 
     // Save to Firestore
     try {
-      await messagesCollection.add({
-        userId,
-        message,
-        timestamp: Date.now()
-      });
+      await messagesCollection.add({ userId, targetUid, message, timestamp });
     } catch (err) {
       console.error("Error saving message:", err);
     }
+
+    // Send message to recipient if online
+    const targetSocket = onlineUsers.get(targetUid);
+    if (targetSocket) {
+      io.to(targetSocket).emit("chat-message", { userId, message, timestamp });
+    }
+
+    // Also send to sender
+    socket.emit("chat-message", { userId, message, timestamp });
   });
 
-  socket.on("disconnect", () => console.log("User disconnected:", socket.id));
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+    // Remove disconnected socket from map
+    for (let [uid, sId] of onlineUsers) {
+      if (sId === socket.id) onlineUsers.delete(uid);
+    }
+  });
 });
 
 // ===== ROUTES =====
 app.get("/", (req, res) => res.send("Backend running ✅"));
 
-// Fetch chat history
-app.get("/api/messages", async (req, res) => {
+// Fetch chat history between two users
+app.get("/api/messages/:uid1/:uid2", async (req, res) => {
+  const { uid1, uid2 } = req.params;
   try {
-    const snapshot = await messagesCollection.orderBy("timestamp").get();
-    const messages = snapshot.docs.map(doc => doc.data());
+    const snapshot = await messagesCollection
+      .where("userId", "in", [uid1, uid2])
+      .orderBy("timestamp")
+      .get();
+
+    const messages = snapshot.docs
+      .map(doc => doc.data())
+      .filter(m => (m.userId === uid1 && m.targetUid === uid2) || (m.userId === uid2 && m.targetUid === uid1));
+
     res.json({ success: true, messages });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
