@@ -2,9 +2,8 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const http = require("http");
 const admin = require("firebase-admin");
-const { ZegoServerAssistant } = require("zego-express-engine-webrtc"); // Correct SDK for Node + WebRTC
+const crypto = require("crypto");
 
 // ===== FIREBASE SETUP =====
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -18,24 +17,19 @@ const db = admin.firestore();
 
 // ===== APP SETUP =====
 const app = express();
-const server = http.createServer(app);
-
-// ===== MIDDLEWARE =====
-app.use(cors({ origin: "*" }));
+app.use(cors());
 app.use(bodyParser.json());
 
 // ===== ZEGOCLOUD CONFIG =====
-const APP_ID = parseInt(process.env.ZEGO_APP_ID);
-const SERVER_SECRET = process.env.ZEGO_SERVER_SECRET;
+const APP_ID = process.env.ZEGO_APP_ID;           // Set in Render env
+const SERVER_SECRET = process.env.ZEGO_SERVER_SECRET; // Set in Render env
 
 // ===== ROUTES =====
 
 // Health check
-app.get("/", (req, res) => {
-  res.send("Backend running ✅");
-});
+app.get("/", (req, res) => res.send("Backend running ✅"));
 
-// Fetch chat messages between two users
+// Fetch chat messages
 app.get("/api/chats/:user1/:user2", async (req, res) => {
   const { user1, user2 } = req.params;
   const chatId = user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
@@ -46,7 +40,6 @@ app.get("/api/chats/:user1/:user2", async (req, res) => {
       .collection("messages")
       .orderBy("timestamp")
       .get();
-
     const messages = snapshot.docs.map((doc) => doc.data());
     res.json({ success: true, messages });
   } catch (err) {
@@ -54,25 +47,20 @@ app.get("/api/chats/:user1/:user2", async (req, res) => {
   }
 });
 
-// Generate Zego token for client
+// Generate ZEGOCLOUD token for client
 app.post("/api/generate-token", (req, res) => {
   const { userId, roomId } = req.body;
-
-  if (!userId || !roomId) {
-    return res.status(400).json({ success: false, error: "Missing userId or roomId" });
-  }
+  if (!userId || !roomId) return res.status(400).json({ error: "Missing userId or roomId" });
 
   try {
-    const effectiveTimeInSeconds = 3600; // token valid 1 hour
-    const payload = "";
-    const token = ZegoServerAssistant.generateToken04(
-      APP_ID,
-      userId,
-      SERVER_SECRET,
-      effectiveTimeInSeconds,
-      payload
-    );
-    res.json({ success: true, token });
+    const now = Math.floor(Date.now() / 1000);
+    const effectiveTimeInSeconds = 3600;
+
+    // Create token (HMAC-SHA256)
+    const message = `${APP_ID}${userId}${now + effectiveTimeInSeconds}${roomId}`;
+    const token = crypto.createHmac("sha256", SERVER_SECRET).update(message).digest("base64");
+
+    res.json({ success: true, token, expire: now + effectiveTimeInSeconds });
   } catch (err) {
     console.error("Error generating token:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -81,4 +69,4 @@ app.post("/api/generate-token", (req, res) => {
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
