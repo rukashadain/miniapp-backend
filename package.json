@@ -19,6 +19,7 @@
     "socket.io": "^4.8.1",
     "bcrypt": "^5.1.0",
     "firebase-admin": "^12.7.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "zecloud": "git+https://github.com/zecloud/zecloud-node-sdk.git"
   }
 }
