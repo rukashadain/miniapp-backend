@@ -4,7 +4,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const http = require("http");
 const admin = require("firebase-admin");
-const { ZegoServerAssistant } = require("zego-express-engine-node"); // ZeGOCloud SDK
+const { ZegoServerAssistant } = require("zego-express-engine-webrtc"); // Correct SDK for Node + WebRTC
 
 // ===== FIREBASE SETUP =====
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -25,17 +25,17 @@ app.use(cors({ origin: "*" }));
 app.use(bodyParser.json());
 
 // ===== ZEGOCLOUD CONFIG =====
-const APP_ID = parseInt(process.env.ZEGO_APP_ID);  // put in Render env
-const SERVER_SECRET = process.env.ZEGO_SERVER_SECRET; // put in Render env
+const APP_ID = parseInt(process.env.ZEGO_APP_ID);
+const SERVER_SECRET = process.env.ZEGO_SERVER_SECRET;
 
 // ===== ROUTES =====
 
-// Check server
+// Health check
 app.get("/", (req, res) => {
   res.send("Backend running ✅");
 });
 
-// Fetch chat messages
+// Fetch chat messages between two users
 app.get("/api/chats/:user1/:user2", async (req, res) => {
   const { user1, user2 } = req.params;
   const chatId = user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
@@ -46,6 +46,7 @@ app.get("/api/chats/:user1/:user2", async (req, res) => {
       .collection("messages")
       .orderBy("timestamp")
       .get();
+
     const messages = snapshot.docs.map((doc) => doc.data());
     res.json({ success: true, messages });
   } catch (err) {
@@ -53,7 +54,7 @@ app.get("/api/chats/:user1/:user2", async (req, res) => {
   }
 });
 
-// 🎯 Generate ZeGOCloud token
+// Generate Zego token for client
 app.post("/api/generate-token", (req, res) => {
   const { userId, roomId } = req.body;
 
@@ -62,7 +63,7 @@ app.post("/api/generate-token", (req, res) => {
   }
 
   try {
-    const effectiveTimeInSeconds = 3600; // 1 hour
+    const effectiveTimeInSeconds = 3600; // token valid 1 hour
     const payload = "";
     const token = ZegoServerAssistant.generateToken04(
       APP_ID,
