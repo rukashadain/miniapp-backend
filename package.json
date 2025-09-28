@@ -20,6 +20,6 @@
     "bcrypt": "^5.1.0",
     "firebase-admin": "^12.7.0",
     "cors": "^2.8.5",
-    "zego-express-engine-node": "^3.11.0"
+    "zego-express-engine-webrtc": "^3.11.0"
   }
 }
