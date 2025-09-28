@@ -1,66 +1,43 @@
 // ===== IMPORTS =====
 const express = require("express");
-const bodyParser = require("body-parser");
 const cors = require("cors");
-const admin = require("firebase-admin");
-const crypto = require("crypto");
-
-// ===== FIREBASE SETUP =====
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-
-const db = admin.firestore();
+const { RtcTokenBuilder, RtcRole } = require("agora-access-token");
+require("dotenv").config();
 
 // ===== APP SETUP =====
 const app = express();
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// ===== ZEGOCLOUD CONFIG =====
-const APP_ID = process.env.ZEGO_APP_ID;           // Set in Render env
-const SERVER_SECRET = process.env.ZEGO_SERVER_SECRET; // Set in Render env
+// ===== AGORA CONFIG =====
+const APP_ID = process.env.AGORA_APP_ID;               // from Render env
+const APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE; // from Render env
 
 // ===== ROUTES =====
 
 // Health check
-app.get("/", (req, res) => res.send("Backend running ✅"));
+app.get("/", (req, res) => res.send("✅ Backend running for Agora calls"));
 
-// Fetch chat messages
-app.get("/api/chats/:user1/:user2", async (req, res) => {
-  const { user1, user2 } = req.params;
-  const chatId = user1 < user2 ? `${user1}_${user2}` : `${user2}_${user1}`;
-  try {
-    const snapshot = await db
-      .collection("chats")
-      .doc(chatId)
-      .collection("messages")
-      .orderBy("timestamp")
-      .get();
-    const messages = snapshot.docs.map((doc) => doc.data());
-    res.json({ success: true, messages });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+// Generate Agora token for client
+app.post("/api/token", (req, res) => {
+  const { channelName, uid } = req.body;
+
+  if (!channelName || !uid) {
+    return res.status(400).json({ error: "Missing channelName or uid" });
   }
-});
-
-// Generate ZEGOCLOUD token for client
-app.post("/api/generate-token", (req, res) => {
-  const { userId, roomId } = req.body;
-  if (!userId || !roomId) return res.status(400).json({ error: "Missing userId or roomId" });
 
   try {
-    const now = Math.floor(Date.now() / 1000);
-    const effectiveTimeInSeconds = 3600;
+    const expireTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+    const token = RtcTokenBuilder.buildTokenWithUid(
+      APP_ID,
+      APP_CERTIFICATE,
+      channelName,
+      uid,
+      RtcRole.PUBLISHER,
+      expireTime
+    );
 
-    // Create token (HMAC-SHA256)
-    const message = `${APP_ID}${userId}${now + effectiveTimeInSeconds}${roomId}`;
-    const token = crypto.createHmac("sha256", SERVER_SECRET).update(message).digest("base64");
-
-    res.json({ success: true, token, expire: now + effectiveTimeInSeconds });
+    res.json({ success: true, token, expireAt: expireTime });
   } catch (err) {
     console.error("Error generating token:", err);
     res.status(500).json({ success: false, error: err.message });
@@ -69,4 +46,4 @@ app.post("/api/generate-token", (req, res) => {
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Agora backend running on port ${PORT}`));
