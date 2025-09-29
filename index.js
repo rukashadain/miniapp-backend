@@ -1,7 +1,6 @@
 // ===== IMPORTS =====
 const express = require("express");
 const cors = require("cors");
-const fetch = require("node-fetch"); // ensure installed: npm install node-fetch
 require("dotenv").config();
 
 // ===== APP SETUP =====
@@ -10,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 // ===== DAILY.CO CONFIG =====
-const DAILY_API_KEY = process.env.DAILY_API_KEY; // put your Daily.co API key in Render env
+const DAILY_API_KEY = process.env.DAILY_API_KEY; // Add this in Render environment variables
 
 // ===== ROUTES =====
 
