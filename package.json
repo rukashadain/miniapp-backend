@@ -1,7 +1,7 @@
 {
-  "name": "miniapp-backend",
+  "name": "miniapp-agora-backend",
   "version": "1.0.0",
-  "description": "Backend for audio/video calls with Agora",
+  "description": "Backend for Agora audio/video calls",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -9,11 +9,9 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2",
-    "socket.io": "^4.7.2",
+    "agora-access-token": "^2.0.4",
     "dotenv": "^16.3.1",
-    "agora-access-token": "^3.4.0",
-    "firebase-admin": "^11.12.0"
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2"
   }
 }
