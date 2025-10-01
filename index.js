@@ -1,5 +1,5 @@
 import express from 'express';
-import { RtcTokenBuilder, RtcRole } from 'agora-token';
+import { RtcTokenBuilder, RtcRole } from 'agora-access-token';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -12,7 +12,7 @@ const { AGORA_APP_ID, AGORA_APP_CERTIFICATE } = process.env;
 // Token generation endpoint
 app.get('/rtc-token/:channelName/:uid', (req, res) => {
   const { channelName, uid } = req.params;
-  const role = RtcRole.PUBLISHER;       // role = publisher (can speak)
+  const role = RtcRole.PUBLISHER;       // role = publisher
   const expirationTime = 3600;           // 1 hour
   const currentTimestamp = Math.floor(Date.now() / 1000);
 
